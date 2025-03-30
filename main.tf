@@ -12,11 +12,11 @@ resource "aws_vpc" "utc-app1" {
   }
 }
 
-#iinternet gateway
+#internet gateway
 resource "aws_internet_gateway" "utc-igw" {
   vpc_id = aws_vpc.utc-app1.id
   tags = {
-    Name = "utc-app1"
+    Name = "utc-igw"
     env  = "Dev"
     Team = "Devops"
   }
@@ -88,7 +88,7 @@ resource "aws_subnet" "utc-private-sub2" {
     Team = "Devops"
   }
 }
-#create routetable  for utc
+#create public routetable  for utc
 resource "aws_route_table" "utc-rt" {
   vpc_id = aws_vpc.utc-app1.id
 
@@ -102,15 +102,40 @@ resource "aws_route_table" "utc-rt" {
     Team = "Devops"
   }
 }
+#create private routetable  for utc
+resource "aws_route_table" "utc-rt2" {
+  vpc_id = aws_vpc.utc-app1.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_nat_gateway.utc-natgw.id
+  }
+  tags = {
+    Name = "utc-rt2"
+    env  = "Dev"
+    Team = "Devops"
+  }
+}
 #public subnet1 association
 resource "aws_route_table_association" "public-sub1" {
-subnet_id  =  aws_subnet.utc-public-sub1.id
-route_table_id = aws_route_table.utc-rt.id
+  subnet_id      = aws_subnet.utc-public-sub1.id
+  route_table_id = aws_route_table.utc-rt.id
 }
-  #public subnet2 association
+#public subnet2 association
 resource "aws_route_table_association" "public-sub2" {
-subnet_id  =  aws_subnet.utc-public-sub2.id
-route_table_id = aws_route_table.utc-rt.id
+  subnet_id      = aws_subnet.utc-public-sub2.id
+  route_table_id = aws_route_table.utc-rt.id
+}
+
+#private subnet1 association
+resource "aws_route_table_association" "private-sub1" {
+  subnet_id      = aws_subnet.utc-private-sub1.id
+  route_table_id = aws_route_table.utc-rt2.id
+}
+#Private subnet2 association
+resource "aws_route_table_association" "private-sub2" {
+  subnet_id      = aws_subnet.utc-private-sub2.id
+  route_table_id = aws_route_table.utc-rt2.id
 }
 
 #create security groups for utc app1
@@ -125,7 +150,7 @@ resource "aws_security_group" "utc-sg" {
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
- 
+
   }
   ingress {
     description = "Allow HTTP"
@@ -139,7 +164,7 @@ resource "aws_security_group" "utc-sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["69.250.208.198/32"]
   }
   egress {
     description = "Allow all outbound traffic"
@@ -169,7 +194,7 @@ resource "aws_key_pair" "utc-key" {
 #create an ec2 instance
 resource "aws_instance" "utc-app1" {
   ami                    = "ami-05b10e08d247fb927"
-  instance_type          = "t3.micro"
+  instance_type          = "t2.micro"
   subnet_id              = aws_subnet.utc-public-sub1.id
   vpc_security_group_ids = [aws_security_group.utc-sg.id]
   key_name               = aws_key_pair.utc-key.key_name
@@ -180,7 +205,7 @@ resource "aws_instance" "utc-app1" {
    yum update -y
    groupadd docker
    useradd John -aG docker 
-   yum install git unzip wget httpd -y
+   yum install git unzip wget docker httpd -y
    systemctl start httpd
    systemctl enable httpd
    cd /opt
@@ -218,10 +243,11 @@ resource "aws_volume_attachment" "utc-vol-attach" {
 
 #creating a dns record
 resource "aws_route53_record" "utc-dns" {
-  zone_id = "Z056635211G6YQMLXKGJ2"  
-  name    = "eyuyun.org" 
+  zone_id = "Z056635211G6YQMLXKGJ2"
+  name    = "eyuyun.org"
   type    = "A"
   ttl     = 300
 
-  records = [aws_instance.utc-app1.public_ip] 
+  records = [aws_instance.utc-app1.public_ip]
 }
+
